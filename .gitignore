@@ -1,0 +1,22 @@
+node_modules/
+dist/
+build/
+coverage/
+
+# Real configuration is never committed; .env.example documents the shape.
+.env
+.env.local
+.env.*.local
+
+# mongodb-memory-server caches downloaded mongod binaries here.
+.cache/
+.mongodb-binaries/
+
+*.log
+npm-debug.log*
+
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+.claude/
