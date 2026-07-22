@@ -1,0 +1,63 @@
+# One-command local reproduction: `docker compose up --build`
+#
+#   web  → http://localhost:8080   (nginx serving the built React app,
+#                                   proxying /api to the API on the same origin)
+#   api  → http://localhost:4000
+#   mongo→ localhost:27017
+#
+# Then seed 10,000 records from the host, against the containerised API:
+#   npm --prefix server run seed
+#
+# The seed script is a development tool and is deliberately excluded from the
+# production image (see server/.dockerignore) — a container that can generate
+# and inject fake audit records is not something to ship.
+
+services:
+  mongo:
+    image: mongo:7
+    restart: unless-stopped
+    ports:
+      - '27017:27017'
+    volumes:
+      - mongo-data:/data/db
+    healthcheck:
+      # The API waits for this, so it never starts against a database that is
+      # listening on the port but not yet accepting commands.
+      test: ['CMD', 'mongosh', '--quiet', '--eval', "db.adminCommand('ping')"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 20s
+
+  api:
+    build:
+      context: ./server
+    restart: unless-stopped
+    environment:
+      NODE_ENV: production
+      PORT: 4000
+      MONGODB_URI: mongodb://mongo:27017/audit_logs
+      MONGODB_DB_NAME: audit_logs
+      # nginx proxies /api on the same origin, so no cross-origin request is
+      # made in this topology. Kept explicit for anyone hitting the API directly.
+      CORS_ORIGIN: http://localhost:8080
+    ports:
+      - '4000:4000'
+    depends_on:
+      mongo:
+        condition: service_healthy
+
+  web:
+    build:
+      context: ./client
+      args:
+        # Empty: the app calls /api on its own origin and nginx proxies it.
+        VITE_API_BASE_URL: ''
+    restart: unless-stopped
+    ports:
+      - '8080:80'
+    depends_on:
+      - api
+
+volumes:
+  mongo-data:
